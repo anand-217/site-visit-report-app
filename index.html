@@ -12,6 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   :root{
     --bg: #F7F4EE;
@@ -147,6 +148,37 @@
   .photo-remove:hover{background:var(--danger);}
 
   .note{font-size:12.5px;color:var(--muted);margin-top:2px;}
+
+  .step-indicator{
+    display:flex;align-items:center;justify-content:center;margin-bottom:22px;
+  }
+  .step-dot{display:flex;flex-direction:column;align-items:center;gap:6px;flex-shrink:0;}
+  .step-dot .dot{
+    width:32px;height:32px;border-radius:50%;background:#EFEAE0;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;
+    border:2px solid var(--line);transition:all .15s;
+  }
+  .step-dot.active .dot{background:var(--orange);color:#fff;border-color:var(--orange);}
+  .step-dot.done .dot{background:var(--orange-dark);color:#fff;border-color:var(--orange-dark);}
+  .step-dot .step-label{font-size:11.5px;color:var(--muted);white-space:nowrap;}
+  .step-dot.active .step-label{color:var(--orange-dark);font-weight:700;}
+  .step-line{width:40px;height:2px;background:var(--line);margin:0 8px;margin-bottom:20px;flex-shrink:0;}
+  @media (max-width:600px){
+    .step-line{width:16px;}
+    .step-dot .step-label{display:none;}
+  }
+
+  .wizard-nav{
+    display:flex;justify-content:space-between;align-items:center;margin-top:6px;gap:12px;
+  }
+  .wizard-nav .btn-secondary:disabled{opacity:.4;cursor:not-allowed;}
+
+  .register-table{width:100%;border-collapse:collapse;font-size:13px;}
+  .register-table th, .register-table td{
+    padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;
+  }
+  .register-table th{color:var(--orange-dark);font-size:12px;text-transform:uppercase;letter-spacing:.3px;}
+  .register-table tr:hover td{background:#FBF8F2;}
 </style>
 </head>
 <body>
@@ -154,86 +186,127 @@
 
   <header class="appbar">
     <div class="logo-slot" id="logoSlot"><span style="color:#B7B2A6;font-size:11px;">LOGO</span></div>
-    <div>
+    <div style="flex:1;">
       <h1>Site Visit Report Generator</h1>
       <p>Fill in the visit details below, then review and export as a PDF report.</p>
     </div>
+    <button type="button" class="btn btn-secondary" id="openRegisterBtn" style="white-space:nowrap;">📋 Register</button>
   </header>
+
+  <!-- ============ REGISTER PANEL ============ -->
+  <div id="registerSection" style="display:none;">
+    <div class="card">
+      <h2>Report Register</h2>
+      <p class="note">A running log of every report generated on this device — report no., date and basic site info only (no observations or photos). Kept automatically each time you generate a PDF.</p>
+      <div style="overflow-x:auto;margin-top:14px;">
+        <table id="registerTable" class="register-table">
+          <thead>
+            <tr><th>Report No.</th><th>Date</th><th>Project</th><th>Drwg No.</th><th>Stage</th><th>Client</th><th>Architect</th><th>Engineer</th></tr>
+          </thead>
+          <tbody id="registerTableBody"></tbody>
+        </table>
+      </div>
+      <p class="note" id="registerEmptyNote" style="display:none;margin-top:12px;">No reports generated yet on this device.</p>
+    </div>
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" id="closeRegisterBtn">← Back</button>
+      <button type="button" class="btn btn-primary" id="exportRegisterBtn">Download as Excel</button>
+    </div>
+  </div>
 
   <!-- ============ FORM SECTION ============ -->
   <div id="formSection">
 
-    <div class="card">
-      <h2>Company Logo</h2>
-      <div class="logo-upload">
-        <div class="preview" id="logoPreview"><span style="color:#B7B2A6;font-size:11px;">no logo</span></div>
-        <label class="file-btn" for="logoInput">Upload / change logo
-          <input type="file" id="logoInput" accept="image/*">
+    <div class="step-indicator" id="stepIndicator">
+      <div class="step-dot active" data-step="1"><span class="dot">1</span><span class="step-label">Basic Info</span></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="2"><span class="dot">2</span><span class="step-label">Observations</span></div>
+      <div class="step-line"></div>
+      <div class="step-dot" data-step="3"><span class="dot">3</span><span class="step-label">Photos &amp; Signatures</span></div>
+    </div>
+
+    <!-- ---- PAGE 1: Basic Info ---- -->
+    <div class="form-page" id="formPage1">
+      <div class="card">
+        <h2>Company Logo</h2>
+        <div class="logo-upload">
+          <div class="preview" id="logoPreview"><span style="color:#B7B2A6;font-size:11px;">no logo</span></div>
+          <label class="file-btn" for="logoInput">Upload / change logo
+            <input type="file" id="logoInput" accept="image/*">
+          </label>
+        </div>
+        <p class="note">PNG/JPG works best. The logo is saved in this browser so you won't need to re-upload it next time you open this file.</p>
+      </div>
+
+      <div class="card">
+        <h2>Report Details</h2>
+        <div class="grid2">
+          <div class="field"><label>Report No.</label><input type="text" id="reportNo" placeholder="e.g. SIR-001"><p class="note" style="margin-top:5px;">Auto-generated — edit if you need a different number.</p></div>
+          <div class="field"><label>Date</label><input type="date" id="reportDate"></div>
+          <div class="field"><label>Project</label><input type="text" id="project" placeholder="Project name"></div>
+          <div class="field"><label>Drawing No.</label><input type="text" id="drgNo" placeholder="e.g. STR-GA-02"></div>
+          <div class="field"><label>Stage of Work</label><input type="text" id="stage" placeholder="e.g. Erection of upright frames"></div>
+          <div class="field"><label>Client</label><input type="text" id="client" placeholder="Client name"></div>
+          <div class="field"><label>Architect</label><input type="text" id="architect" placeholder="Architect / PMC name"></div>
+          <div class="field"><label>Engineer Incharge</label><input type="text" id="engIncharge" placeholder="Site engineer name"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- PAGE 2: Observations ---- -->
+    <div class="form-page" id="formPage2" style="display:none;">
+      <div class="card">
+        <h2>Observations</h2>
+        <div id="obsList"></div>
+        <button type="button" class="add-obs-btn" id="addObsBtn">+ Add observation</button>
+      </div>
+    </div>
+
+    <!-- ---- PAGE 3: Photos & Signatures ---- -->
+    <div class="form-page" id="formPage3" style="display:none;">
+      <div class="card">
+        <h2>Site Photographs</h2>
+        <label class="file-btn" for="photoInput">+ Add photos from gallery
+          <input type="file" id="photoInput" accept="image/*" multiple>
         </label>
+        <p class="note">Photos are compressed automatically for a clear but reasonably-sized PDF, and will be laid out 2 per row at the end of the report.</p>
+        <div class="photo-grid" id="photoGrid"></div>
       </div>
-      <p class="note">PNG/JPG works best. The logo is saved in this browser so you won't need to re-upload it next time you open this file.</p>
-    </div>
 
-    <div class="card">
-      <h2>Report Details</h2>
-      <div class="grid2">
-        <div class="field"><label>Report No.</label><input type="text" id="reportNo" placeholder="e.g. SIR-001"><p class="note" style="margin-top:5px;">Auto-generated — edit if you need a different number.</p></div>
-        <div class="field"><label>Date</label><input type="date" id="reportDate"></div>
-        <div class="field"><label>Project</label><input type="text" id="project" placeholder="Project name"></div>
-        <div class="field"><label>Drawing No.</label><input type="text" id="drgNo" placeholder="e.g. STR-GA-02"></div>
-        <div class="field"><label>Stage of Work</label><input type="text" id="stage" placeholder="e.g. Erection of upright frames"></div>
-        <div class="field"><label>Client</label><input type="text" id="client" placeholder="Client name"></div>
-        <div class="field"><label>Architect</label><input type="text" id="architect" placeholder="Architect / PMC name"></div>
-        <div class="field"><label>Engineer Incharge</label><input type="text" id="engIncharge" placeholder="Site engineer name"></div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Observations</h2>
-      <div id="obsList"></div>
-      <button type="button" class="add-obs-btn" id="addObsBtn">+ Add observation</button>
-    </div>
-
-    <div class="card">
-      <h2>Site Photographs</h2>
-      <label class="file-btn" for="photoInput">+ Add photos from gallery
-        <input type="file" id="photoInput" accept="image/*" multiple>
-      </label>
-      <p class="note">Photos are compressed automatically for a clear but reasonably-sized PDF, and will be laid out 2 per row at the end of the report.</p>
-      <div class="photo-grid" id="photoGrid"></div>
-    </div>
-
-    <div class="card">
-      <h2>Signatures</h2>
-      <div class="sig-block">
-        <h3>1. Stiffbuild Consultant</h3>
-        <canvas class="sigpad" id="sig1" width="360" height="130"></canvas>
-        <div class="sig-controls">
-          <button type="button" class="clear-sig" data-target="sig1">Clear signature</button>
+      <div class="card">
+        <h2>Signatures</h2>
+        <div class="sig-block">
+          <h3>1. Stiffbuild Consultant</h3>
+          <canvas class="sigpad" id="sig1" width="360" height="130"></canvas>
+          <div class="sig-controls">
+            <button type="button" class="clear-sig" data-target="sig1">Clear signature</button>
+          </div>
+          <input type="text" class="sig-name-input" id="sig1Name" placeholder="Name">
         </div>
-        <input type="text" class="sig-name-input" id="sig1Name" placeholder="Name">
-      </div>
-      <div class="sig-block">
-        <h3>2. Arch / PMC</h3>
-        <canvas class="sigpad" id="sig2" width="360" height="130"></canvas>
-        <div class="sig-controls">
-          <button type="button" class="clear-sig" data-target="sig2">Clear signature</button>
+        <div class="sig-block">
+          <h3>2. Arch / PMC</h3>
+          <canvas class="sigpad" id="sig2" width="360" height="130"></canvas>
+          <div class="sig-controls">
+            <button type="button" class="clear-sig" data-target="sig2">Clear signature</button>
+          </div>
+          <input type="text" class="sig-name-input" id="sig2Name" placeholder="Name">
         </div>
-        <input type="text" class="sig-name-input" id="sig2Name" placeholder="Name">
-      </div>
-      <div class="sig-block">
-        <h3>3. Engineer Incharge</h3>
-        <canvas class="sigpad" id="sig3" width="360" height="130"></canvas>
-        <div class="sig-controls">
-          <button type="button" class="clear-sig" data-target="sig3">Clear signature</button>
+        <div class="sig-block">
+          <h3>3. Engineer Incharge</h3>
+          <canvas class="sigpad" id="sig3" width="360" height="130"></canvas>
+          <div class="sig-controls">
+            <button type="button" class="clear-sig" data-target="sig3">Clear signature</button>
+          </div>
+          <input type="text" class="sig-name-input" id="sig3Name" placeholder="Name">
         </div>
-        <input type="text" class="sig-name-input" id="sig3Name" placeholder="Name">
+        <p class="note">Sign with mouse, stylus or finger directly on each box. Signatures are optional here — you may also leave them blank and sign the printed copy.</p>
       </div>
-      <p class="note">Sign with mouse, stylus or finger directly on each box. Signatures are optional here — you may also leave them blank and sign the printed copy.</p>
     </div>
 
-    <div class="actions">
-      <button type="button" class="btn btn-primary" id="reviewBtn">Verify details →</button>
+    <div class="wizard-nav">
+      <button type="button" class="btn btn-secondary" id="prevBtn">‹ Previous</button>
+      <button type="button" class="btn btn-primary" id="nextBtn">Next ›</button>
+      <button type="button" class="btn btn-primary" id="reviewBtn" style="display:none;">Submit — Verify details ✓</button>
     </div>
   </div>
 
@@ -450,25 +523,71 @@ function sigDataUrl(id){
   return c.toDataURL('image/png');
 }
 
+// ---------- Wizard navigation (3 pages) ----------
+const TOTAL_PAGES = 3;
+let currentPage = 1;
+const formPages = [null, document.getElementById('formPage1'), document.getElementById('formPage2'), document.getElementById('formPage3')];
+const stepDots = document.querySelectorAll('.step-dot');
+const prevBtn = document.getElementById('prevBtn');
+const nextBtn = document.getElementById('nextBtn');
+const wizardReviewBtn = document.getElementById('reviewBtn');
+
+function fieldVal(id){ return document.getElementById(id).value.trim(); }
+
+function validatePage(n){
+  if(n === 1){
+    const required = [['reportNo','Report No.'],['reportDate','Date'],['project','Project']];
+    for(const [id,label] of required){
+      if(!fieldVal(id)){ alert('Please fill in: ' + label); return false; }
+    }
+  }
+  if(n === 2){
+    const obsTexts = Array.from(document.querySelectorAll('.obs-text')).map(t=>t.value.trim()).filter(t=>t);
+    if(obsTexts.length === 0){ alert('Please add at least one observation.'); return false; }
+  }
+  return true;
+}
+
+function showPage(n){
+  currentPage = n;
+  for(let i=1;i<=TOTAL_PAGES;i++){
+    formPages[i].style.display = (i === n) ? 'block' : 'none';
+  }
+  stepDots.forEach(dot=>{
+    const s = parseInt(dot.dataset.step,10);
+    dot.classList.toggle('active', s === n);
+    dot.classList.toggle('done', s < n);
+  });
+  prevBtn.style.visibility = (n === 1) ? 'hidden' : 'visible';
+  nextBtn.style.display = (n === TOTAL_PAGES) ? 'none' : 'inline-block';
+  wizardReviewBtn.style.display = (n === TOTAL_PAGES) ? 'inline-block' : 'none';
+  window.scrollTo(0,0);
+}
+
+prevBtn.addEventListener('click', ()=>{
+  if(currentPage > 1) showPage(currentPage - 1);
+});
+nextBtn.addEventListener('click', ()=>{
+  if(!validatePage(currentPage)) return;
+  if(currentPage < TOTAL_PAGES) showPage(currentPage + 1);
+});
+stepDots.forEach(dot=>{
+  dot.addEventListener('click', ()=>{
+    const target = parseInt(dot.dataset.step,10);
+    if(target < currentPage){ showPage(target); return; } // going back needs no validation
+    for(let p=currentPage; p<target; p++){ if(!validatePage(p)) return; }
+    showPage(target);
+  });
+});
+showPage(1);
+
 // ---------- Review step ----------
 const formSection = document.getElementById('formSection');
 const reviewSection = document.getElementById('reviewSection');
 
-function fieldVal(id){ return document.getElementById(id).value.trim(); }
-
 document.getElementById('reviewBtn').addEventListener('click', ()=>{
-  const required = [['reportNo','Report No.'],['reportDate','Date'],['project','Project']];
-  for(const [id,label] of required){
-    if(!fieldVal(id)){
-      alert('Please fill in: ' + label);
-      return;
-    }
-  }
+  if(!validatePage(1) || !validatePage(2)) return;
   const obsTexts = Array.from(document.querySelectorAll('.obs-text')).map(t=>t.value.trim()).filter(t=>t);
-  if(obsTexts.length === 0){
-    alert('Please add at least one observation.');
-    return;
-  }
 
   // populate review grid
   const pairs = [
@@ -565,20 +684,18 @@ function generatePDF(){
     doc.rect(0,0,pageW,pageH,'F');
   }
 
-  function drawWatermark(){
-    if(!logoDataUrl) return;
-    try{
-      doc.saveGraphicsState();
-      doc.setGState(new doc.GState({opacity: 0.05}));
-      const wmW = 130, wmH = wmW * 0.5417;
-      doc.addImage(logoDataUrl, 'PNG', (pageW - wmW)/2, (pageH - wmH)/2, wmW, wmH);
-      doc.restoreGraphicsState();
-    }catch(e){}
+  function drawRuledLines(){
+    // faint diary-style ruled lines across the writable area of the page
+    doc.setDrawColor(228,222,208);
+    doc.setLineWidth(0.2);
+    for(let ly = 46; ly <= 278; ly += 7){
+      doc.line(marginX, ly, pageW - marginX, ly);
+    }
   }
 
   function drawHeader(){
     fillBg();
-    drawWatermark();
+    drawRuledLines();
     doc.setTextColor(...ink);
     doc.setFont('helvetica','bold');
     doc.setFontSize(11);
@@ -653,6 +770,12 @@ function generatePDF(){
   doc.setLineWidth(0.4);
   doc.line(marginX, y, pageW - marginX, y);
   y += 9;
+
+  doc.setFont('helvetica','bold');
+  doc.setFontSize(12);
+  doc.setTextColor(...orange);
+  doc.text('Observations', marginX, y);
+  y += 8;
 
   doc.setFont('helvetica','normal');
   doc.setFontSize(11);
@@ -790,7 +913,70 @@ function generatePDF(){
   const fname = `SiteVisitReport_${reportNo || 'draft'}_${reportDate || ''}.pdf`.replace(/\s+/g,'_');
   doc.save(fname);
   commitReportNoIfMatchesSuggestion();
+  addToRegister({
+    reportNo, date: reportDate, project, drgNo, stage, client, architect, engIncharge
+  });
 }
+
+// ---------- Report Register (local log of every generated report) ----------
+const REGISTER_KEY = 'svr_register';
+
+function getRegister(){
+  try{ return JSON.parse(localStorage.getItem(REGISTER_KEY) || '[]'); }
+  catch(e){ return []; }
+}
+
+function addToRegister(entry){
+  const reg = getRegister();
+  reg.push(entry);
+  localStorage.setItem(REGISTER_KEY, JSON.stringify(reg));
+}
+
+function renderRegisterTable(){
+  const reg = getRegister();
+  const tbody = document.getElementById('registerTableBody');
+  const emptyNote = document.getElementById('registerEmptyNote');
+  tbody.innerHTML = '';
+  if(reg.length === 0){
+    emptyNote.style.display = 'block';
+    return;
+  }
+  emptyNote.style.display = 'none';
+  // most recent first
+  reg.slice().reverse().forEach(r=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${r.reportNo||''}</td><td>${r.date||''}</td><td>${r.project||''}</td><td>${r.drgNo||''}</td><td>${r.stage||''}</td><td>${r.client||''}</td><td>${r.architect||''}</td><td>${r.engIncharge||''}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+function exportRegisterExcel(){
+  const reg = getRegister();
+  const rows = [['Report No.','Date','Project','Drawing No.','Stage of Work','Client','Architect','Engineer Incharge']];
+  reg.forEach(r=>{
+    rows.push([r.reportNo||'', r.date||'', r.project||'', r.drgNo||'', r.stage||'', r.client||'', r.architect||'', r.engIncharge||'']);
+  });
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:12},{wch:12},{wch:22},{wch:14},{wch:20},{wch:18},{wch:18},{wch:18}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Register');
+  XLSX.writeFile(wb, 'SiteVisitReport_Register.xlsx');
+}
+
+const registerSection = document.getElementById('registerSection');
+document.getElementById('openRegisterBtn').addEventListener('click', ()=>{
+  renderRegisterTable();
+  formSection.style.display = 'none';
+  reviewSection.style.display = 'none';
+  registerSection.style.display = 'block';
+  window.scrollTo(0,0);
+});
+document.getElementById('closeRegisterBtn').addEventListener('click', ()=>{
+  registerSection.style.display = 'none';
+  formSection.style.display = 'block';
+  window.scrollTo(0,0);
+});
+document.getElementById('exportRegisterBtn').addEventListener('click', exportRegisterExcel);
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
